@@ -1,71 +1,72 @@
 import React, { Component } from 'react';
+import { Searchbar } from './Searchbar/Searchbar';
+import { fetchImages } from 'api/ImgFinderApi';
+import { ImageGallery } from './ImageGallery/ImageGallery';
+import { Button } from './Button/Button';
+import { Loader } from './Loader/Loader';
 
-import { StyledContainer } from './App.styled';
-import { ContactForm } from './ContactForm/ContactForm';
-import { ContactList } from './ContactList/ContactList';
-import { Filter } from './Filter/Filter';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 
 export class App extends Component {
   state = {
-    contacts: [
-      { id: 'id-1', name: 'Rosie Simpson', number: '459-12-56' },
-      { id: 'id-2', name: 'Hermione Kline', number: '443-89-12' },
-      { id: 'id-3', name: 'Eden Clements', number: '645-17-79' },
-      { id: 'id-4', name: 'Annie Copeland', number: '227-91-26' },
-    ],
-    filter: '',
+    query: '',
+    images: [],
+    page: 1,
+    totalHits: 0,
+    isLoading: false,
   };
 
-  componentDidMount() {
-    const data = localStorage.getItem('contacts');
+  async componentDidUpdate(_, prevState) {
+    const { query, page } = this.state;
 
-    if (data) {
-      this.setState({ contacts: JSON.parse(data) });
+    if (prevState.query !== query || prevState.page !== page) {
+      try {
+        this.setState({ isLoading: true });
+
+        const { totalHits, hits } = await fetchImages(query, page);
+
+        if (totalHits === 0) {
+          toast.error('Nothing was found for your request');
+          return;
+        }
+
+        this.setState(prevState => ({
+          images: page === 1 ? hits : [...prevState.images, ...hits],
+
+          totalHits:
+            page === 1
+              ? totalHits - hits.length
+              : totalHits - [...prevState.images, ...hits].length,
+        }));
+      } catch (error) {
+        toast.error(`Oops! Something went wrong! ${error}`);
+      } finally {
+        this.setState({ isLoading: false });
+      }
     }
   }
-  componentDidUpdate(_, prevState) {
-    if (this.state.contacts.length !== prevState.contacts.length)
-      localStorage.setItem('contacts', JSON.stringify(this.state.contacts));
-  }
 
-  handlerSubmit = data => {
-    this.setState(({ contacts }) =>
-      contacts.find(contact => contact.name === data.name)
-        ? alert(`${data.name} is already in contacts`)
-        : { contacts: [data, ...contacts] }
-    );
+  handleQuerySubmit = query => {
+    this.setState({ query, page: 1 });
   };
 
-  onFilter = e => {
-    const { value } = e.currentTarget;
-    this.setState({ filter: value });
-  };
-
-  deleteContact = contactId => {
-    this.setState(prevState => ({
-      contacts: prevState.contacts.filter(contact => contact.id !== contactId),
-    }));
+  handleLoadMore = () => {
+    this.setState(prevState => ({ page: prevState.page + 1 }));
   };
 
   render() {
-    const { contacts, filter } = this.state;
-
-    const filteredContacts = contacts.filter(contact =>
-      contact.name.toLowerCase().includes(filter.toLowerCase())
-    );
-
+    const { images, totalHits, isLoading } = this.state;
     return (
-      <StyledContainer>
-        <h1>Phonebook</h1>
-        <ContactForm onSubmit={this.handlerSubmit}></ContactForm>
+      <>
+        <Searchbar onSubmit={this.handleQuerySubmit}></Searchbar>
+        {images && <ImageGallery images={images}></ImageGallery>}
+        {!!totalHits && <Button onLoadMore={this.handleLoadMore}></Button>}
+        {isLoading && <Loader />}
 
-        <h2>Contacts</h2>
-        <Filter value={filter} onFilter={this.onFilter} />
-        <ContactList
-          deleteContact={this.deleteContact}
-          contacts={filteredContacts}
-        />
-      </StyledContainer>
+        <ToastContainer autoClose={2000} />
+      </>
     );
   }
 }
